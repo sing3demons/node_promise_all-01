@@ -16,13 +16,30 @@ async function main() {
   })
 
   app.post('/example', async (req, res) => {
-      const { name } = req.body
-      console.log(req.body)
+    const { name } = req.body
+    console.log(req.body)
     const id = nano.randomNanoId()
-    const result = await getCollection().insertOne({ id, name })
+    const result = await getCollection().insertOne({
+      id,
+      name,
+      createDate: new Date(new Date().toUTCString()),
+      updateDate: new Date(new Date().toUTCString()),
+    })
     result.insertedId
     const data = await getCollection().findOne({ _id: result.insertedId })
     res.status(201).json(data)
+  })
+
+  app.delete('/example/:id', async (req, res) => {
+    const { id } = req.params
+
+    const result = await getCollection().findOneAndUpdate(
+      { id },
+      { $set: { deleteDate: new Date(new Date().toUTCString()) } },
+      { upsert: true, returnDocument: 'after' }
+    )
+
+    res.status(200).json(result)
   })
 
   app.listen(3000, () => console.log('Server listening on port 3000'))

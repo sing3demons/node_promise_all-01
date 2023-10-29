@@ -7,6 +7,9 @@ const client = new MongoClient(url)
 interface Example {
   id: string
   name: string
+  description?: string
+  createDate: Date
+  updateDate: Date
 }
 
 export async function connect() {

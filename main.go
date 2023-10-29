@@ -14,9 +14,20 @@ import (
 )
 
 type RequestData struct {
-	Id   string `json:"id,omitempty"`
-	Name string `json:"name,omitempty"`
-	Href string `json:"href,omitempty"`
+	Id         string    `json:"id,omitempty"`
+	Name       string    `json:"name,omitempty"`
+	Href       string    `json:"href,omitempty"`
+	CreateDate time.Time `json:"createDate,omitempty"`
+	UpdateDate time.Time `json:"updateDate,omitempty"`
+}
+
+type deleteData struct {
+	Id         string    `json:"id,omitempty"`
+	Name       string    `json:"name,omitempty"`
+	Href       string    `json:"href,omitempty"`
+	CreateDate time.Time `json:"createDate,omitempty"`
+	UpdateDate time.Time `json:"updateDate,omitempty"`
+	DeleteDate time.Time `json:"deleteDate,omitempty"`
 }
 
 type DB struct {
@@ -51,6 +62,11 @@ type ResponseData struct {
 	Data  []RequestData `json:"data"`
 }
 
+func TimeToBangkok(t time.Time) time.Time {
+	loc, _ := time.LoadLocation("Asia/Bangkok")
+	return t.In(loc)
+}
+
 func (h *DB) getData(c *gin.Context) {
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -60,7 +76,7 @@ func (h *DB) getData(c *gin.Context) {
 	opts := options.FindOptions{}
 	opts.SetSort(bson.D{{Key: "name", Value: 1}})
 
-	filter := bson.M{}
+	filter := bson.M{"deleteDate": nil}
 	cursor, err := h.col.Find(ctx, filter, &opts)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
@@ -73,9 +89,11 @@ func (h *DB) getData(c *gin.Context) {
 			return
 		}
 		response = append(response, RequestData{
-			Id:   result.Id,
-			Name: result.Name,
-			Href: fmt.Sprintf("http://localhost:2566/example/%s", result.Id),
+			Id:         result.Id,
+			Name:       result.Name,
+			Href:       fmt.Sprintf("http://localhost:2566/example/%s", result.Id),
+			CreateDate: TimeToBangkok(result.CreateDate),
+			UpdateDate: TimeToBangkok(result.UpdateDate),
 		})
 	}
 
@@ -100,7 +118,7 @@ func (h *DB) getDataMulti(c *gin.Context) {
 	opts := options.FindOptions{}
 	opts.SetSort(bson.D{{Key: "name", Value: 1}})
 
-	filter := bson.M{}
+	filter := bson.M{"deleteDate": nil}
 	total := make(chan int64, 1)
 	go h.getTotal(filter, total)
 	cursor, err := h.col.Find(ctx, filter, &opts)
@@ -115,9 +133,11 @@ func (h *DB) getDataMulti(c *gin.Context) {
 			return
 		}
 		response = append(response, RequestData{
-			Id:   result.Id,
-			Name: result.Name,
-			Href: fmt.Sprintf("http://localhost:2566/example/%s", result.Id),
+			Id:         result.Id,
+			Name:       result.Name,
+			Href:       fmt.Sprintf("http://localhost:2566/example/%s", result.Id),
+			CreateDate: TimeToBangkok(result.CreateDate),
+			UpdateDate: TimeToBangkok(result.UpdateDate),
 		})
 	}
 
@@ -143,6 +163,7 @@ func main() {
 	r.GET("/example", h.getData)
 	r.GET("/example/multi", h.getDataMulti)
 	r.GET("/example/:id", h.getDataById)
+	r.DELETE("/example/:id", h.deleteDataById)
 	r.POST("/example/1", func(c *gin.Context) {
 		start := time.Now()
 		result := createAsyncData(data) // Time: 5.04395879s
@@ -168,6 +189,7 @@ func main() {
 
 }
 
+
 func (h *DB) getDataById(c *gin.Context) {
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -177,11 +199,14 @@ func (h *DB) getDataById(c *gin.Context) {
 
 	result := RequestData{}
 
-	filter := bson.M{"id": id}
-	total := make(chan int64, 1)
-	go h.getTotal(filter, total)
+	filter := bson.M{"id": id, "deleteDate": nil}
 
 	if err := h.col.FindOne(ctx, filter).Decode(&result); err != nil {
+		if err == mongo.ErrNoDocuments {
+			c.JSON(http.StatusNotFound, gin.H{"message": "Not found"})
+			return
+		}
+
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 		return
 	}
@@ -190,6 +215,47 @@ func (h *DB) getDataById(c *gin.Context) {
 		Id:   result.Id,
 		Name: result.Name,
 		Href: fmt.Sprintf("http://localhost:3000/example/%s", result.Id),
+		CreateDate: TimeToBangkok(result.CreateDate),
+		UpdateDate: TimeToBangkok(result.UpdateDate),
+	}
+
+	c.JSON(http.StatusOK, response)
+	end := time.Now()
+	fmt.Printf("Time: %s\n", end.Sub(start))
+}
+
+func (h *DB) deleteDataById(c *gin.Context) {
+	start := time.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	id := c.Param("id")
+
+	result := deleteData{}
+
+	filter := bson.M{"id": id, "deleteDate": nil}
+
+	updateDoc := bson.M{"$set": bson.M{"deleteDate": TimeToBangkok(time.Now())}}
+
+	opts := options.FindOneAndUpdate()
+	opts.SetReturnDocument(options.After)
+	opts.SetReturnDocument(options.After)
+	if err := h.col.FindOneAndUpdate(ctx, filter, updateDoc, opts).Decode(&result); err != nil {
+			if err == mongo.ErrNoDocuments {
+			c.JSON(http.StatusNotFound, gin.H{"message": "Not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		return
+	}
+
+	response := deleteData{
+		Id:         result.Id,
+		Name:       result.Name,
+		Href:       fmt.Sprintf("http://localhost:3000/example/%s", result.Id),
+		CreateDate: TimeToBangkok(result.CreateDate),
+		UpdateDate: TimeToBangkok(result.UpdateDate),
+		DeleteDate: TimeToBangkok(result.DeleteDate),
 	}
 
 	c.JSON(http.StatusOK, response)
