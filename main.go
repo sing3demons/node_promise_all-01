@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -127,9 +128,6 @@ func httpGet(data RequestData) (*RequestData, error) {
 		fmt.Println("Error:", err)
 		return nil, err
 	}
-	if err != nil {
-		return nil, err
-	}
 
 	var result RequestData
 	err = json.Unmarshal(body, &result)
@@ -138,4 +136,52 @@ func httpGet(data RequestData) (*RequestData, error) {
 	}
 
 	return &result, nil
+}
+
+func httpGetWithRetry(data RequestData, maxRetries int) (*RequestData, error) {
+	timeout := 30 * time.Second
+	b, err := json.Marshal(data)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return nil, err
+	}
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+
+		httpReq, err := http.NewRequest(http.MethodPost, "http://localhost:3000/example", bytes.NewBuffer(b))
+		if err != nil {
+			return nil, err
+		}
+		httpReq = httpReq.WithContext(ctx)
+		httpReq.Header.Set("Content-Type", "application/json")
+		httpClient := &http.Client{
+			Timeout: timeout,
+		}
+		resp, err := httpClient.Do(httpReq)
+		if err != nil {
+			// Log the error
+			fmt.Println("Attempt", attempt, "- Error:", err)
+			continue
+		}
+		defer resp.Body.Close()
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			// Log the error
+			fmt.Println("Attempt", attempt, "- Error:", err)
+			continue
+		}
+
+		var result RequestData
+		err = json.Unmarshal(body, &result)
+		if err != nil {
+			return nil, err
+		}
+
+		return &result, nil
+	}
+
+	return nil, fmt.Errorf("max retries exceeded")
 }
