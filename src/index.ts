@@ -16,7 +16,8 @@ async function main() {
   })
 
   app.post('/example', async (req, res) => {
-    const { name } = req.body
+      const { name } = req.body
+      console.log(req.body)
     const id = nano.randomNanoId()
     const result = await getCollection().insertOne({ id, name })
     result.insertedId
