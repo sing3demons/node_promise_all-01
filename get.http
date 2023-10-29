@@ -1,6 +1,9 @@
 @url = http://localhost:2566/
 
-GET {{url}} HTTP/1.1
+GET {{url}}example HTTP/1.1
+
+###
+GET {{url}}example/multi HTTP/1.1
 
 ###
 POST {{url}}example/1 HTTP/1.1
